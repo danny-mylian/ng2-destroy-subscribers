@@ -40,16 +40,17 @@ export function DestroySubscribers(args?: IDestroySubscribers) {
         this[params._removeSubscribersFunc]();
       }
 
-      // Receive subscribers container as a param
-      // Can be Subscriber[], as well as { k1: Subscriber, k2: Subscriber };
-      Object.keys(this[params._subscriptions]).forEach(key => {
+      const subscriptionKeys = []
+        .concat(Object.keys(this[params._subscriptions]))
+        .concat(Object.getOwnPropertySymbols(this[params._subscriptions]));
+
+      subscriptionKeys.forEach(key => {
         const subscriber = this[params._subscriptions][key];
         if (subscriber instanceof Subscriber) {
-          // console.log(`Unsubscribed from: ${key}`);
           subscriber.unsubscribe();
         }
       });
-    }
+   }
 
     const actionsList: Array<() => void> = [subAction, destroyAction];
     const [initSubDecorator, destroySubDecorator] = actionsList.map(decorateComponentMethod);
