@@ -1,52 +1,65 @@
-import {Subscriber} from "rxjs";
+import { Subscriber } from 'rxjs';
 
-export function DestroySubscribers(
-  params?
-) {
+export interface IDestroySubscribers {
+  _addSubscribersFunc?: string;
+  _removeSubscribersFunc?: string;
+  _onInitSubscriptions?: string;
+  _onDestroySubscriptions?: string;
+  _subscriptions?: string;
+}
+
+export function DestroySubscribers(args?: IDestroySubscribers) {
+
   return function (target: any) {
-    params = Object.assign({
-      addSubscribersFunc: 'addSubscribers',
-      removeSubscribersFunc: 'removeSubscribers',
-      initFunc: 'ngOnInit',
-      destroyFunc: 'ngOnDestroy',
-    }, params);
-    
-    target.prototype[params.initFunc] = ngOnInitDecorator(target.prototype[params.initFunc]);
-    target.prototype[params.destroyFunc] = ngOnDestroyDecorator(target.prototype[params.destroyFunc]);
-    
-    function ngOnDestroyDecorator(f) {
-      return function () {
-        let superData = f ? f.apply(this, arguments) : null;
-        
-        if (typeof this[params.removeSubscribersFunc] === 'function') {
-          this[params.removeSubscribersFunc]();
+
+    const params: IDestroySubscribers = Object.assign({}, {
+      _addSubscribersFunc: 'addSubscribers',
+      _removeSubscribersFunc: 'removeSubscribers',
+      _onInitSubscriptions: 'ngOnInit',
+      _onDestroySubscriptions: 'ngOnDestroy',
+      _subscriptions: 'subscribers'
+    }, args);
+
+    function decorateComponentMethod(action: () => void) {
+      return function(protoFunction: () => any) {
+        return function() {
+          action.call(this);
+          return protoFunction ? protoFunction.apply(this, arguments) : null;
         }
-        
-        for (let subscriberKey in this.subscribers) {
-          let subscriber = this.subscribers[subscriberKey];
-          if (subscriber instanceof Subscriber) {
-            subscriber.unsubscribe();
-          }
-        }
-        
-        return superData;
       }
     }
-    
-    function ngOnInitDecorator(f) {
-      return function () {
-        let superData = f ? f.apply(this, arguments) : null;
-        
-        
-        if (typeof this[params.addSubscribersFunc] === 'function') {
-          this[params.addSubscribersFunc]();
-        }
-        
-        
-        return superData;
+
+    function subAction(): void {
+      if (typeof this[params._addSubscribersFunc] === 'function') {
+        this[params._addSubscribersFunc]();
       }
     }
-    
+
+    function destroyAction(): void {
+      if (typeof this[params._removeSubscribersFunc] === 'function') {
+        this[params._removeSubscribersFunc]();
+      }
+
+      // Receive subscribers container as a param
+      // Can be Subscriber[], as well as { k1: Subscriber, k2: Subscriber };
+      Object.keys(this[params._subscriptions]).forEach(key => {
+        const subscriber = this[params._subscriptions][key];
+        if (subscriber instanceof Subscriber) {
+          // console.log(`Unsubscribed from: ${key}`);
+          subscriber.unsubscribe();
+        }
+      });
+    }
+
+    const actionsList: Array<() => void> = [subAction, destroyAction];
+    const [initSubDecorator, destroySubDecorator] = actionsList.map(decorateComponentMethod);
+
+    // const initSubDecorator = decorateComponentMethod(subAction);
+    // const destroySubDecorator = decorateComponentMethod(destroyAction);
+
+    target.prototype[params._onInitSubscriptions] = initSubDecorator(target.prototype[params._onInitSubscriptions]);
+    target.prototype[params._onDestroySubscriptions] = destroySubDecorator(target.prototype[params._onDestroySubscriptions]);
+
     return target;
   }
 }
